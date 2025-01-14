@@ -1,0 +1,151 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"workspaceName": {
+			"type": "string",
+			"metadata": "Workspace name",
+			"defaultValue": "synapse03dmg5o"
+		},
+		"synapse03dmg5o-WorkspaceDefaultSqlServer_connectionString": {
+			"type": "secureString",
+			"metadata": "Secure string for 'connectionString' of 'synapse03dmg5o-WorkspaceDefaultSqlServer'",
+			"defaultValue": "Integrated Security=False;Encrypt=True;Connection Timeout=30;Data Source=tcp:synapse03dmg5o.sql.azuresynapse.net,1433;Initial Catalog=@{linkedService().DBName}"
+		},
+		"synapse03dmg5o-WorkspaceDefaultStorage_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://datalake03dmg5o.dfs.core.windows.net"
+		}
+	},
+	"variables": {
+		"workspaceId": "[concat('Microsoft.Synapse/workspaces/', parameters('workspaceName'))]"
+	},
+	"resources": [
+		{
+			"name": "[concat(parameters('workspaceName'), '/sparkpool')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synapse03dmg5o-WorkspaceDefaultSqlServer')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"parameters": {
+					"DBName": {
+						"type": "String"
+					}
+				},
+				"annotations": [],
+				"type": "AzureSqlDW",
+				"typeProperties": {
+					"connectionString": "[parameters('synapse03dmg5o-WorkspaceDefaultSqlServer_connectionString')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/synapse03dmg5o-WorkspaceDefaultStorage')]",
+			"type": "Microsoft.Synapse/workspaces/linkedServices",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"annotations": [],
+				"type": "AzureBlobFS",
+				"typeProperties": {
+					"url": "[parameters('synapse03dmg5o-WorkspaceDefaultStorage_properties_typeProperties_url')]"
+				},
+				"connectVia": {
+					"referenceName": "AutoResolveIntegrationRuntime",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('workspaceId'), '/integrationRuntimes/AutoResolveIntegrationRuntime')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/AutoResolveIntegrationRuntime')]",
+			"type": "Microsoft.Synapse/workspaces/integrationRuntimes",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "Managed",
+				"typeProperties": {
+					"computeProperties": {
+						"location": "AutoResolve",
+						"dataFlowProperties": {
+							"computeType": "General",
+							"coreCount": 8,
+							"timeToLive": 0
+						}
+					}
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/WorkspaceSystemIdentity')]",
+			"type": "Microsoft.Synapse/workspaces/credentials",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"type": "ManagedIdentity",
+				"typeProperties": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/SQL script 1')]",
+			"type": "Microsoft.Synapse/workspaces/sqlscripts",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"content": {
+					"query": "\n SELECT\n    TOP 100 *\n FROM\n    OPENROWSET(\n    BULK 'https://datalakexxxxxxx.dfs.core.windows.net/files/sales/csv/',\n    FORMAT = 'CSV',\n    PARSER_VERSION='2.0'\n ) AS [result];\n\n\n SELECT\n    TOP 100 *\n FROM\n    OPENROWSET(\n        BULK 'https://datalakexxxxxxx.dfs.core.windows.net/files/sales/csv/',\n        FORMAT = 'CSV',\n        PARSER_VERSION='2.0'\n     )\n     WITH (\n         SalesOrderNumber VARCHAR(10) COLLATE Latin1_General_100_BIN2_UTF8,\n         SalesOrderLineNumber INT,\n         OrderDate DATE,\n         CustomerName VARCHAR(25) COLLATE Latin1_General_100_BIN2_UTF8,\n         EmailAddress VARCHAR(50) COLLATE Latin1_General_100_BIN2_UTF8,\n         Item VARCHAR(30) COLLATE Latin1_General_100_BIN2_UTF8,\n         Quantity INT,\n         UnitPrice DECIMAL(18,2),\n         TaxAmount DECIMAL (18,2)\n     ) AS [result];\n\n CREATE EXTERNAL FILE FORMAT CsvFormat\n     WITH (\n         FORMAT_TYPE = DELIMITEDTEXT,\n         FORMAT_OPTIONS(\n         FIELD_TERMINATOR = ',',\n         STRING_DELIMITER = '\"'\n         )\n     );\n GO;\n\n CREATE EXTERNAL TABLE dbo.orders\n (\n     SalesOrderNumber VARCHAR(10),\n     SalesOrderLineNumber INT,\n     OrderDate DATE,\n     CustomerName VARCHAR(25),\n     EmailAddress VARCHAR(50),\n     Item VARCHAR(30),\n     Quantity INT,\n     UnitPrice DECIMAL(18,2),\n     TaxAmount DECIMAL (18,2)\n )\n WITH\n (\n     DATA_SOURCE =sales_data,\n     LOCATION = 'csv/*.csv',\n     FILE_FORMAT = CsvFormat\n );\n GO;\n\n SELECT YEAR(OrderDate) AS OrderYear,\n        SUM((UnitPrice * Quantity) + TaxAmount) AS GrossRevenue\n FROM dbo.orders\n GROUP BY YEAR(OrderDate)\n ORDER BY OrderYear;\n\n \n \n",
+					"metadata": {
+						"language": "sql"
+					},
+					"currentConnection": {
+						"databaseName": "master",
+						"poolName": "Built-in"
+					},
+					"resultLimit": 5000
+				},
+				"type": "SqlQuery"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('workspaceName'), '/sparkpool')]",
+			"type": "Microsoft.Synapse/workspaces/bigDataPools",
+			"apiVersion": "2019-06-01-preview",
+			"properties": {
+				"autoPause": {
+					"enabled": true,
+					"delayInMinutes": 15
+				},
+				"autoScale": {
+					"enabled": true,
+					"maxNodeCount": 10,
+					"minNodeCount": 3
+				},
+				"nodeCount": 10,
+				"nodeSize": "Medium",
+				"nodeSizeFamily": "MemoryOptimized",
+				"sparkVersion": "3.4",
+				"isComputeIsolationEnabled": false,
+				"sessionLevelPackagesEnabled": false,
+				"annotations": []
+			},
+			"dependsOn": [],
+			"location": "eastus2"
+		}
+	]
+}
