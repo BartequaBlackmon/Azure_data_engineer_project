@@ -1,0 +1,9 @@
+{
+	"name": "dateng",
+	"location": "eastus",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "ed002632-370f-4783-8e1c-b95f2225ab41",
+		"tenantId": "dc60f33d-1086-4399-9704-20952f72ba47"
+	}
+}
